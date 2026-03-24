@@ -33,7 +33,7 @@ def home():
 
 
 # 🔥 Get all topics (MAIN ENDPOINT)
-@app.get("/topics")
+@app.get("/topics/")
 def get_topics():
     topics = collection.distinct("topic")
 
