@@ -3,6 +3,7 @@ from pymongo import MongoClient
 import os
 import requests
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime, timedelta
 
 app = FastAPI()
 
@@ -34,14 +35,14 @@ def generate_ai_summary(text):
         "Authorization": f"Bearer {os.getenv('HF_API_KEY')}"
     }
 
-    # 🔥 limit text (important for API)
+    # 🔥 limit text size
     text = text[:2000]
 
     payload = {
-        "inputs": text,
+        "inputs": f"Summarize the following news updates into a clear, concise 2-3 sentence summary:\n\n{text}",
         "parameters": {
-            "max_length": 100,
-            "min_length": 30
+            "max_length": 120,
+            "min_length": 40
         }
     }
 
@@ -74,7 +75,7 @@ def get_topics():
     for topic in topics:
         docs = list(
             collection.find({"topic": topic})
-            .sort("created_at", 1)  # chronological order
+            .sort("created_at", 1)  # chronological
         )
 
         if not docs:
@@ -82,10 +83,15 @@ def get_topics():
 
         latest = docs[-1]
 
+        # 🔥 FILTER OLD NEWS (last 24 hours only)
+        if "created_at" in latest:
+            if latest["created_at"] < datetime.utcnow() - timedelta(hours=24):
+                continue
+
         # 🔥 combine ALL messages
         all_text = " ".join([d.get("text", "") for d in docs])
 
-        # 🤖 AI SUMMARY
+        # 🤖 AI summary
         summary = generate_ai_summary(all_text)
 
         result.append({
@@ -94,11 +100,11 @@ def get_topics():
             "headline": latest.get("headline", "No headline"),
             "summary": summary,
             "updates": len(docs),
-            "last_updated": latest.get("created_at")
+            "last_updated": latest.get("created_at").strftime("%d %b %I:%M %p") if latest.get("created_at") else ""
         })
 
-    # 🔥 sort by activity
-    result.sort(key=lambda x: x["updates"], reverse=True)
+    # 🔥 SORT BY LATEST UPDATE TIME
+    result.sort(key=lambda x: x["last_updated"], reverse=True)
 
     return result
 
@@ -122,7 +128,7 @@ def get_topic_details(topic_id: str):
                 "text": d.get("text"),
                 "summary": d.get("summary"),
                 "headline": d.get("headline"),
-                "created_at": d.get("created_at")
+                "created_at": d.get("created_at").strftime("%d %b %I:%M %p") if d.get("created_at") else ""
             }
             for d in docs
         ]
