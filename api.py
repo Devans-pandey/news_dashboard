@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from pymongo import MongoClient
 import os
+import requests
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -25,6 +26,38 @@ db = client["news_db"]
 collection = db["messages"]
 
 
+# 🔥 AI SUMMARY FUNCTION
+def generate_ai_summary(text):
+    API_URL = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
+
+    headers = {
+        "Authorization": f"Bearer {os.getenv('HF_API_KEY')}"
+    }
+
+    # 🔥 limit text (important for API)
+    text = text[:2000]
+
+    payload = {
+        "inputs": text,
+        "parameters": {
+            "max_length": 100,
+            "min_length": 30
+        }
+    }
+
+    try:
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=10)
+
+        if response.status_code == 200:
+            return response.json()[0]["summary_text"]
+
+        return text[:200]
+
+    except Exception as e:
+        print("AI Error:", e)
+        return text[:200]
+
+
 # 🏠 Health check
 @app.get("/")
 def home():
@@ -41,7 +74,7 @@ def get_topics():
     for topic in topics:
         docs = list(
             collection.find({"topic": topic})
-            .sort("created_at", 1)  # chronological
+            .sort("created_at", 1)  # chronological order
         )
 
         if not docs:
@@ -52,8 +85,8 @@ def get_topics():
         # 🔥 combine ALL messages
         all_text = " ".join([d.get("text", "") for d in docs])
 
-        # 🔥 basic summary (later replace with AI)
-        summary = all_text[:300] + "..." if len(all_text) > 300 else all_text
+        # 🤖 AI SUMMARY
+        summary = generate_ai_summary(all_text)
 
         result.append({
             "topic": topic,
@@ -64,7 +97,7 @@ def get_topics():
             "last_updated": latest.get("created_at")
         })
 
-    # 🔥 sort by most updates
+    # 🔥 sort by activity
     result.sort(key=lambda x: x["updates"], reverse=True)
 
     return result
