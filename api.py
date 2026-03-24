@@ -4,12 +4,11 @@ import os
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
-print("api file loaded")
 
-# 🌐 Allow frontend access (VERY IMPORTANT for React later)
+# 🌐 CORS (allow frontend)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # later restrict to your frontend URL
+    allow_origins=["*"],  # later restrict to your Vercel URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -26,14 +25,14 @@ db = client["news_db"]
 collection = db["messages"]
 
 
-# 🏠 Health check route
+# 🏠 Health check
 @app.get("/")
 def home():
     return {"status": "API is running 🚀"}
 
 
-# 🔥 Get all topics (MAIN ENDPOINT)
-@app.get("/topics/")
+# 🔥 MAIN: Get all topics
+@app.get("/topics")
 def get_topics():
     topics = collection.distinct("topic")
 
@@ -42,30 +41,36 @@ def get_topics():
     for topic in topics:
         docs = list(
             collection.find({"topic": topic})
-            .sort("created_at", -1)
+            .sort("created_at", 1)  # chronological
         )
 
         if not docs:
             continue
 
-        latest = docs[0]
+        latest = docs[-1]
+
+        # 🔥 combine ALL messages
+        all_text = " ".join([d.get("text", "") for d in docs])
+
+        # 🔥 basic summary (later replace with AI)
+        summary = all_text[:300] + "..." if len(all_text) > 300 else all_text
 
         result.append({
             "topic": topic,
             "topic_name": latest.get("topic_name", "Unknown"),
             "headline": latest.get("headline", "No headline"),
-            "summary": latest.get("summary", ""),
+            "summary": summary,
             "updates": len(docs),
             "last_updated": latest.get("created_at")
         })
 
-    # 🔥 sort by updates (most active first)
+    # 🔥 sort by most updates
     result.sort(key=lambda x: x["updates"], reverse=True)
 
     return result
 
 
-# 🔥 Get full timeline for a topic (FOR YOUR FUTURE UI PAGE)
+# 🔥 TIMELINE: Get full topic details
 @app.get("/topic/{topic_id}")
 def get_topic_details(topic_id: str):
     docs = list(
