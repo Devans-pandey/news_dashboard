@@ -85,7 +85,7 @@ def get_topics():
 
         # 🔥 FILTER OLD NEWS (last 24 hours only)
         if "created_at" in latest:
-            if latest["created_at"] < datetime.utcnow() - timedelta(hours=24):
+            if latest["created_at"] < datetime.utcnow() - timedelta(hours=96):
                 continue
 
         # 🔥 combine ALL messages
