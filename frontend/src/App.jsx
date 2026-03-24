@@ -2,44 +2,84 @@ import { useEffect, useState } from "react";
 
 function App() {
   const [topics, setTopics] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const API_URL = "https://news-dashboard-6grl.onrender.com/topics";
+
+  // 🔁 Fetch with retry (handles Render sleep)
+  const fetchTopics = async () => {
+    try {
+      console.log("Fetching topics...");
+
+      const res = await fetch(API_URL);
+
+      console.log("Status:", res.status);
+
+      if (!res.ok) {
+        throw new Error("Response not OK");
+      }
+
+      const data = await res.json();
+
+      console.log("DATA:", data);
+
+      setTopics(data);
+      setLoading(false);
+
+    } catch (err) {
+      console.error("Fetch failed, retrying in 5s...", err);
+
+      // retry after 5 sec
+      setTimeout(fetchTopics, 5000);
+    }
+  };
 
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/topics")
-      .then((res) => res.json())
-      .then((data) => {
-        console.log("DATA:", data); // 🔍 debug
-        setTopics(data);
-      })
-      .catch((err) => console.error("ERROR:", err));
+    fetchTopics();
   }, []);
 
-  if (!topics || topics.length === 0) {
-    return <h1 style={{ textAlign: "center" }}>Loading news...</h1>;
-  }
-
   return (
-    <div style={{ padding: "20px", color: "white" }}>
-      <h1>🔥 Live News Dashboard</h1>
+    <div
+      style={{
+        padding: "20px",
+        backgroundColor: "#0f172a",
+        minHeight: "100vh",
+        color: "white"
+      }}
+    >
+      <h1 style={{ textAlign: "center" }}>
+        🔥 Live News Dashboard
+      </h1>
 
-      {topics.map((topic, index) => (
-        <div
-          key={index}
-          style={{
-            marginBottom: "20px",
-            padding: "15px",
-            border: "1px solid #444",
-            borderRadius: "10px",
-          }}
-        >
-          <h2>
-            🔥 {topic.headline || topic.topic_name || "News Update"}
-          </h2>
-
-          <p>Updates: {topic.updates}</p>
-
-          <p>{topic.summary || "No summary available"}</p>
+      {/* 🔄 Loading state */}
+      {loading ? (
+        <div style={{ textAlign: "center", marginTop: "40px" }}>
+          <p>Waking up server... ⏳</p>
         </div>
-      ))}
+      ) : topics.length === 0 ? (
+        <p>No topics found</p>
+      ) : (
+        topics.map((t, i) => (
+          <div
+            key={i}
+            style={{
+              border: "1px solid #334155",
+              borderRadius: "12px",
+              padding: "15px",
+              marginBottom: "15px",
+              backgroundColor: "#1e293b"
+            }}
+          >
+            <h3>🔥 {t.headline}</h3>
+
+            <p style={{ color: "#94a3b8" }}>
+              Updates: {t.updates}
+            </p>
+
+            <p>{t.summary}</p>
+          </div>
+        ))
+      )}
     </div>
   );
 }
