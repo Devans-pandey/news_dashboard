@@ -4,7 +4,7 @@ function App() {
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const API_URL = "https://news-dashboard-6grl.onrender.com/topics/";
+  const API_URL = "https://news-dashboard-6grl.onrender.com/topics";
 
   useEffect(() => {
     const fetchData = async () => {
