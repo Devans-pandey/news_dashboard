@@ -20,7 +20,7 @@ NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 if not NEWS_API_KEY:
     raise Exception("NEWS_API_KEY not found")
 
-NEWS_URL = f"https://newsapi.org/v2/top-headlines?country=in&pageSize=10&apiKey={NEWS_API_KEY}"
+NEWS_URL = f"https://newsapi.org/v2/everything?q=india OR world OR geopolitics&sortBy=publishedAt&pageSize=10&apiKey={NEWS_API_KEY}"
 
 # 🔥 SIMPLE TOPIC GROUPING
 def get_topic(text):
