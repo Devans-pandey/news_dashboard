@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 
-const API_URL = "https://news-dashboard-6grl.onrender.com/topics";
+const API_URL = "https://news-dashboard-6gr1.onrender.com/topics";
 
 function App() {
   const [news, setNews] = useState([]);
