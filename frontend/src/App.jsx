@@ -1,66 +1,62 @@
 import { useEffect, useState } from "react";
+import "./App.css";
+
+const API_URL = "https://news-dashboard-6grl.onrender.com/topics";
 
 function App() {
-  const [topics, setTopics] = useState([]);
+  const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const API_URL = "https://news-dashboard-6rg1.onrender.com/topics";
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchNews = async () => {
       try {
-        const res = await fetch(API_URL);
+        const res = await fetch(API_URL, {
+          cache: "no-store", // 🔥 prevent caching
+        });
 
-        const data = await res.json();
-
-        console.log("DATA:", data);
-
-        // ✅ IMPORTANT FIX
-        if (Array.isArray(data)) {
-          setTopics(data);
-        } else {
-          console.log("Not an array:", data);
+        if (!res.ok) {
+          throw new Error("Failed to fetch");
         }
 
-        setLoading(false); // 🔥 always stop loading
-
+        const data = await res.json();
+        setNews(data);
       } catch (err) {
-        console.error("Error:", err);
-
-        // retry after 5 sec
-        setTimeout(fetchData, 5000);
+        console.error(err);
+        setError("Failed to load news");
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchData();
+    fetchNews();
   }, []);
 
   return (
-    <div style={{ padding: "20px", background: "#0f172a", minHeight: "100vh", color: "white" }}>
-      <h1 style={{ textAlign: "center" }}>🔥 Live News Dashboard</h1>
+    <div className="container">
+      <h1>🔥 Live News Dashboard</h1>
 
-      {loading ? (
-        <p style={{ textAlign: "center" }}>Waking up server... ⏳</p>
-      ) : topics.length === 0 ? (
-        <p style={{ textAlign: "center" }}>No data found</p>
-      ) : (
-        topics.map((t, i) => (
-          <div
-            key={i}
-            style={{
-              border: "1px solid #334155",
-              borderRadius: "12px",
-              padding: "15px",
-              marginBottom: "15px",
-              background: "#1e293b"
-            }}
-          >
-            <h3>🔥 {t.headline}</h3>
-            <p style={{ color: "#94a3b8" }}>Updates: {t.updates}</p>
-            <p>{t.summary}</p>
-          </div>
-        ))
-      )}
+      {loading && <p>Loading news...</p>}
+      {error && <p>{error}</p>}
+
+      {!loading && news.length === 0 && <p>No news available</p>}
+
+      {news.map((item, index) => (
+        <div key={index} className="card">
+          <h2>🔥 {item.headline}</h2>
+
+          <p><b>Updates:</b> {item.updates}</p>
+
+          <p>
+            <b>Last Updated:</b>{" "}
+            {item.last_updated
+              ? new Date(item.last_updated).toLocaleString()
+              : "N/A"}
+          </p>
+
+          <p className="summary">{item.summary}</p>
+        </div>
+      ))}
     </div>
   );
 }
