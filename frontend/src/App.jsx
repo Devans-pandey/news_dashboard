@@ -1,60 +1,76 @@
 import { useEffect, useState } from "react";
-import "./App.css";
-
-const API_URL = "https://news-dashboard-6rg1.onrender.com/topics";
 
 function App() {
-  const [news, setNews] = useState([]);
+  const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const fetchNews = async () => {
-      try {
-        const res = await fetch(API_URL, {
-          cache: "no-store", // 🔥 prevent caching
-        });
+  const API_URL = "https://news-dashboard-eitf.onrender.com/topics";
 
-        if (!res.ok) {
-          throw new Error("Failed to fetch");
-        }
+  const fetchData = async () => {
+    try {
+      const res = await fetch(API_URL);
 
-        const data = await res.json();
-        setNews(data);
-      } catch (err) {
-        console.error(err);
-        setError("Failed to load news");
-      } finally {
-        setLoading(false);
+      if (!res.ok) {
+        throw new Error("Failed to fetch");
       }
-    };
 
-    fetchNews();
+      const data = await res.json();
+      setTopics(data);
+      setLoading(false);
+    } catch (err) {
+      console.error("Error:", err);
+      setError("Failed to load news");
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData(); // initial load
+
+    const interval = setInterval(() => {
+      fetchData(); // auto refresh every 60 sec
+    }, 60000);
+
+    return () => clearInterval(interval);
   }, []);
 
   return (
-    <div className="container">
+    <div style={{ padding: "20px", fontFamily: "Arial" }}>
       <h1>🔥 Live News Dashboard</h1>
 
       {loading && <p>Loading news...</p>}
       {error && <p>{error}</p>}
 
-      {!loading && news.length === 0 && <p>No news available</p>}
+      {!loading && topics.length === 0 && <p>No news available</p>}
 
-      {news.map((item, index) => (
-        <div key={index} className="card">
-          <h2>🔥 {item.headline}</h2>
+      {topics.map((t, index) => (
+        <div
+          key={index}
+          style={{
+            border: "1px solid #ccc",
+            padding: "15px",
+            marginBottom: "15px",
+            borderRadius: "10px",
+            background: "#111",
+            color: "#fff"
+          }}
+        >
+          <h3>🔥 {t.headline}</h3>
 
-          <p><b>Updates:</b> {item.updates}</p>
-
-          <p>
-            <b>Last Updated:</b>{" "}
-            {item.last_updated
-              ? new Date(item.last_updated).toLocaleString()
-              : "N/A"}
+          <p style={{ color: "#ccc" }}>
+            {t.summary || "No summary available"}
           </p>
 
-          <p className="summary">{item.summary}</p>
+          <p>
+            <strong>Updates:</strong> {t.updates}
+          </p>
+
+          <p style={{ fontSize: "12px", color: "#aaa" }}>
+            {t.last_updated
+              ? new Date(t.last_updated).toLocaleString()
+              : "No time"}
+          </p>
         </div>
       ))}
     </div>
