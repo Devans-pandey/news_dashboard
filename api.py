@@ -4,6 +4,7 @@ import os
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+print("api file loaded")
 
 # 🌐 Allow frontend access (VERY IMPORTANT for React later)
 app.add_middleware(
