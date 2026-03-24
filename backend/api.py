@@ -1,9 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from pymongo import MongoClient
 import os
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
-from fetcher import fetch_news  # 🔥 import fetch function
+from fetcher import fetch_news
+
+import threading
+import time
 
 app = FastAPI()
 
@@ -27,13 +30,34 @@ db = client["news_db"]
 collection = db["messages"]
 
 
-# 🏠 Health check
-@app.get("/")
-def home():
+# 🏠 Health check (FIXED for UptimeRobot)
+@app.api_route("/", methods=["GET", "HEAD"])
+def home(request: Request):
     return {"status": "API is running 🚀"}
 
 
-# 🔥 FETCH NEWS (MANUAL TRIGGER)
+# 🔥 AUTO FETCH FUNCTION
+def background_fetch():
+    while True:
+        try:
+            print("🚀 Auto fetching news...")
+            fetch_news()
+            print("✅ Fetch done. Sleeping 60 sec...\n")
+        except Exception as e:
+            print("❌ Fetch error:", e)
+
+        time.sleep(60)  # every 60 seconds
+
+
+# 🚀 START BACKGROUND TASK
+@app.on_event("startup")
+def start_background_task():
+    thread = threading.Thread(target=background_fetch)
+    thread.daemon = True
+    thread.start()
+
+
+# 🔥 MANUAL FETCH (optional)
 @app.get("/fetch-news")
 def run_fetch():
     try:
@@ -61,7 +85,7 @@ def get_topics():
 
         latest = docs[0]
 
-        # 🔥 FILTER: skip very old topics (> 96 hours)
+        # 🔥 FILTER: remove very old topics (> 96 hours)
         if latest.get("created_at"):
             diff = datetime.utcnow() - latest["created_at"]
             if diff.total_seconds() > 96 * 3600:
@@ -76,7 +100,7 @@ def get_topics():
             "last_updated": latest.get("created_at")
         })
 
-    # 🔥 sort by latest time (NEWEST FIRST)
+    # 🔥 sort by newest first
     result.sort(
         key=lambda x: x["last_updated"] or datetime.min,
         reverse=True
