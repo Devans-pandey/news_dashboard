@@ -70,43 +70,39 @@ def run_fetch():
 # 🔥 GET ALL TOPICS
 @app.get("/topics")
 def get_topics():
-    topics = collection.distinct("topic")
+    pipeline = [
+        {
+            "$sort": {"created_at": -1}
+        },
+        {
+            "$group": {
+                "_id": "$topic",
+                "topic_name": {"$first": "$topic_name"},
+                "headline": {"$first": "$headline"},
+                "summary": {"$first": "$summary"},
+                "last_updated": {"$first": "$created_at"},
+                "updates": {"$sum": 1}
+            }
+        },
+        {
+            "$sort": {"last_updated": -1}
+        }
+    ]
 
-    result = []
+    result = list(collection.aggregate(pipeline))
 
-    for topic in topics:
-        docs = list(
-            collection.find({"topic": topic})
-            .sort("created_at", -1)
-        )
-
-        if not docs:
-            continue
-
-        latest = docs[0]
-
-        # 🔥 FILTER: remove very old topics (> 96 hours)
-        if latest.get("created_at"):
-            diff = datetime.utcnow() - latest["created_at"]
-            if diff.total_seconds() > 96 * 3600:
-                continue
-
-        result.append({
-            "topic": topic,
-            "topic_name": latest.get("topic_name", "Unknown"),
-            "headline": latest.get("headline", "No headline"),
-            "summary": latest.get("summary", ""),
-            "updates": len(docs),
-            "last_updated": latest.get("created_at")
-        })
-
-    # 🔥 sort by newest first
-    result.sort(
-        key=lambda x: x["last_updated"] or datetime.min,
-        reverse=True
-    )
-
-    return result
+    # clean format
+    return [
+        {
+            "topic": r["_id"],
+            "topic_name": r.get("topic_name"),
+            "headline": r.get("headline"),
+            "summary": r.get("summary"),
+            "updates": r.get("updates"),
+            "last_updated": r.get("last_updated")
+        }
+        for r in result
+    ]
 
 
 # 🔥 GET FULL TIMELINE
