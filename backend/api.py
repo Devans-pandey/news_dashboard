@@ -10,10 +10,10 @@ import time
 
 app = FastAPI()
 
-# 🌐 CORS (allow frontend)
+# 🌐 CORS (restrict in production)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # later restrict to your frontend URL
+    allow_origins=["*"],  # ⚠️ change in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,14 +29,18 @@ client = MongoClient(MONGO_URI)
 db = client["news_db"]
 collection = db["messages"]
 
+# ⚡ CREATE INDEXES (IMPORTANT for performance)
+collection.create_index([("topic", 1)])
+collection.create_index([("created_at", -1)])
+collection.create_index([("processed", 1)])
 
-# 🏠 Health check (FIXED for UptimeRobot)
+# 🏠 Health check
 @app.api_route("/", methods=["GET", "HEAD"])
 def home(request: Request):
     return {"status": "API is running 🚀"}
 
 
-# 🔥 AUTO FETCH FUNCTION
+# 🔥 AUTO FETCH FUNCTION (SAFE VERSION)
 def background_fetch():
     while True:
         try:
@@ -46,18 +50,17 @@ def background_fetch():
         except Exception as e:
             print("❌ Fetch error:", e)
 
-        time.sleep(60)  # every 60 seconds
+        time.sleep(60)
 
 
 # 🚀 START BACKGROUND TASK
 @app.on_event("startup")
 def start_background_task():
-    thread = threading.Thread(target=background_fetch)
-    thread.daemon = True
+    thread = threading.Thread(target=background_fetch, daemon=True)
     thread.start()
 
 
-# 🔥 MANUAL FETCH (optional)
+# 🔥 MANUAL FETCH
 @app.get("/fetch-news")
 def run_fetch():
     try:
@@ -67,13 +70,11 @@ def run_fetch():
         return {"error": str(e)}
 
 
-# 🔥 GET ALL TOPICS
+# 🔥 GET ALL TOPICS (OPTIMIZED)
 @app.get("/topics")
 def get_topics():
     pipeline = [
-        {
-            "$sort": {"created_at": -1}
-        },
+        {"$sort": {"created_at": -1}},
         {
             "$group": {
                 "_id": "$topic",
@@ -84,14 +85,12 @@ def get_topics():
                 "updates": {"$sum": 1}
             }
         },
-        {
-            "$sort": {"last_updated": -1}
-        }
+        {"$sort": {"last_updated": -1}},
+        {"$limit": 50}  # ⚠️ prevent huge responses
     ]
 
     result = list(collection.aggregate(pipeline))
 
-    # clean format
     return [
         {
             "topic": r["_id"],
@@ -105,12 +104,13 @@ def get_topics():
     ]
 
 
-# 🔥 GET FULL TIMELINE
+# 🔥 GET FULL TIMELINE (PAGINATED)
 @app.get("/topic/{topic_id}")
-def get_topic_details(topic_id: str):
+def get_topic_details(topic_id: str, limit: int = 50):
     docs = list(
         collection.find({"topic": topic_id})
-        .sort("created_at", 1)
+        .sort("created_at", -1)
+        .limit(limit)
     )
 
     if not docs:
@@ -129,3 +129,15 @@ def get_topic_details(topic_id: str):
             for d in docs
         ]
     }
+
+
+# 🔥 OPTIONAL: DELETE OLD DATA (to control DB size)
+@app.delete("/cleanup")
+def cleanup(days: int = 7):
+    cutoff = datetime.utcnow() - timedelta(days=days)
+
+    result = collection.delete_many({
+        "created_at": {"$lt": cutoff}
+    })
+
+    return {"deleted": result.deleted_count}
