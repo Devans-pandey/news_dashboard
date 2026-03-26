@@ -1,5 +1,8 @@
-fastapi
+telethon
+sentence_transformer
+scikit_learn
+transformers
+spacy
+torch
 uvicorn
 pymongo
-requests
-python-dotenv
