@@ -5,7 +5,7 @@ import time
 # 🔌 MongoDB connection
 MONGO_URI = "mongodb+srv://newsdash:newsdash@cluster0.tialnu4.mongodb.net/news_db?retryWrites=true&w=majority"
 
-client = MongoClient(MONGO_URI)
+Zclient = MongoClient(MONGO_URI)
 db = client["news_db"]
 collection = db["messages"]
 

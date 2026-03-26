@@ -1,106 +1,37 @@
 from telethon import TelegramClient, events
 from pymongo import MongoClient
 from datetime import datetime
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
-from transformers import pipeline
 import time
-import spacy
 import os
-import threading
 
-# 🔥 FASTAPI (for Render port requirement)
-from fastapi import FastAPI
-import uvicorn
-
-app = FastAPI()
-
-@app.get("/")
-def home():
-    return {"status": "telegram fetch running"}
-
-
-# 🔤 NLP
-nlp = spacy.load("en_core_web_sm")
-
-# 🤖 embedding model
-model = SentenceTransformer('all-MiniLM-L6-v2')
-
-# 🔌 MongoDB
+# 🔌 MongoDB connection (use env variable in Render)
 MONGO_URI = os.getenv("MONGO_URI")
+
+if not MONGO_URI:
+    raise Exception("❌ MONGO_URI not found in environment variables")
+
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client["news_db"]
 collection = db["messages"]
 
-# 🤖 headline generator
-headline_generator = pipeline(
-    "text2text-generation",
-    model="google/flan-t5-base"
-)
+# 📡 Telegram API credentials (YOURS)
+api_id = 32424333
+api_hash = "3fae8215547deff7b0930dbff9870226"
 
-# 🔍 Find topic using similarity
-def find_topic(message):
-    new_emb = model.encode(message)
-
-    recent = list(collection.find().sort("created_at", -1).limit(100))
-
-    best_score = 0
-    best_topic = None
-
-    for doc in recent:
-        if "embedding" not in doc:
-            continue
-
-        old_emb = doc["embedding"]
-        score = cosine_similarity([new_emb], [old_emb])[0][0]
-
-        if score > best_score:
-            best_score = score
-            best_topic = doc.get("topic")
-
-    if best_score > 0.4 and best_topic:
-        return best_topic, new_emb
-    else:
-        return f"Topic_{int(time.time())}", new_emb
-
-
-# 🧠 Smart topic naming
-def generate_topic_name(text):
-    prompt = f"""
-    Generate a short news headline (max 8 words).
-
-    Rules:
-    - Do NOT use "X vs Y"
-    - Capture the main event
-    - Use proper country/entity names
-
-    Text:
-    {text}
-    """
-
-    try:
-        result = headline_generator(
-            prompt,
-            max_length=30,
-            do_sample=False
-        )[0]['generated_text']
-
-        return result.strip()
-
-    except:
-        return "Breaking news"
-
-
-# 📡 TELEGRAM CONFIG
-api_id = int(os.getenv("TELEGRAM_API_ID"))
-api_hash = os.getenv("TELEGRAM_API_HASH")
-
+# 📡 Telegram client
 client = TelegramClient('session', api_id, api_hash, auto_reconnect=True)
 
-channels = ["osinttv", "defencesphere", "MappingConflicts", "goreunit", "dashNewsmy"]
+# 📢 Channels to monitor
+channels = [
+    "osinttv",
+    "defencesphere",
+    "MappingConflicts",
+    "dashNewsmy"
+]
 
+print("🚀 Starting Telegram Fetcher...")
 
-# 🔄 MESSAGE HANDLER
+# 🔄 Message handler (NO AI — only raw storage)
 @client.on(events.NewMessage(chats=channels))
 async def handler(event):
     message = event.message.text
@@ -108,45 +39,45 @@ async def handler(event):
     if not message:
         return
 
-    topic, embedding = find_topic(message)
-    topic_name = generate_topic_name(message)
-
     data = {
         "text": message,
         "date": event.message.date,
         "channel": str(event.chat_id),
         "created_at": datetime.utcnow(),
-        "topic": topic,
-        "topic_name": topic_name,
-        "embedding": embedding.tolist()
+
+        # 🔥 IMPORTANT FLAGS
+        "processed": False,   # worker will process later
+        "topic": None,
+        "topic_name": None,
+        "headline": None,
+        "summary": None
     }
 
-    # 🔥 avoid duplicates
-    collection.update_one(
-        {"text": message},
-        {"$setOnInsert": data},
-        upsert=True
-    )
+    try:
+        collection.insert_one(data)
 
-    print(f"✅ Saved: {topic_name}")
+        print("\n✅ NEW MESSAGE SAVED:")
+        print(message[:100])
+        print("-" * 50)
+
+    except Exception as e:
+        print("❌ DB Error:", e)
 
 
-# 🚀 TELEGRAM LISTENER FUNCTION
-def start_telegram():
+# 🚀 MAIN LOOP (auto reconnect)
+def main():
     while True:
         try:
-            print("🚀 Starting Telegram listener...")
+            print("📡 Listening to Telegram channels...\n")
             client.start()
             client.run_until_disconnected()
+
         except Exception as e:
-            print("❌ Telegram error:", e)
+            print("❌ Error:", e)
+            print("🔄 Reconnecting in 5 seconds...\n")
             time.sleep(5)
 
 
-# 🚀 MAIN ENTRY
+# ▶️ Run
 if __name__ == "__main__":
-    # Run telegram in background
-    threading.Thread(target=start_telegram, daemon=True).start()
-
-    # Start FastAPI server (required by Render)
-    uvicorn.run(app, host="0.0.0.0", port=10000)
+    main()
