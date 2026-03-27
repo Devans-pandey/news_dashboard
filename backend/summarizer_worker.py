@@ -1,92 +1,118 @@
 from pymongo import MongoClient
 from transformers import pipeline
+from datetime import datetime
 import time
 
-# 🔌 MongoDB connection
+# 🔌 MongoDB
 MONGO_URI = "mongodb+srv://newsdash:newsdash@cluster0.tialnu4.mongodb.net/news_db?retryWrites=true&w=majority"
-
-Zclient = MongoClient(MONGO_URI)
+client = MongoClient(MONGO_URI)
 db = client["news_db"]
 collection = db["messages"]
 
-# 🤖 Load summarizer (only once)
+# 🤖 Load model
 print("Loading summarizer model...")
-summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-6-6")
+generator = pipeline(
+    "text2text-generation",
+    model="google/flan-t5-base"
+)
 
-print("Worker started successfully!")
+# 🧠 Generate summary for topic
+def generate_summary(text):
+    prompt = f"""
+    Summarize the following news updates into a clear concise paragraph:
 
-# 🧠 Generate headline from summary
-def generate_headline(summary):
-    try:
-        short = summarizer(
-            summary,
-            max_length=25,
-            min_length=8,
-            do_sample=False
-        )[0]["summary_text"]
-
-        return short.strip()
-
-    except:
-        return summary[:60]
-
-
-# 🔁 MAIN LOOP (TOPIC-LEVEL PROCESSING)
-while True:
-    print("\n🔄 Updating topic summaries...")
+    {text}
+    """
 
     try:
-        # 🔥 get all topics
-        topics = collection.distinct("topic")
-
-        for topic in topics:
-            # 🔥 get latest 5 messages for that topic
-            docs = list(
-                collection.find({"topic": topic})
-                .sort("created_at", -1)
-                .limit(5)
-            )
-
-            if not docs:
-                continue
-
-            # 🔥 combine text
-            combined_text = " ".join([d.get("text", "") for d in docs])
-
-            if not combined_text.strip():
-                continue
-
-            try:
-                # ✂️ Generate summary
-                summary = summarizer(
-                    combined_text,
-                    max_length=100,
-                    min_length=30,
-                    do_sample=False
-                )[0]["summary_text"]
-
-                # 🧠 Generate headline
-                headline = generate_headline(summary)
-
-                # 💾 Update ALL documents of that topic
-                collection.update_many(
-                    {"topic": topic},
-                    {
-                        "$set": {
-                            "summary": summary,
-                            "headline": headline
-                        }
-                    }
-                )
-
-                print(f"✅ Updated topic: {topic}")
-                print(f"📰 Headline: {headline}\n")
-
-            except Exception as e:
-                print(f"❌ Error processing topic {topic}: {e}")
-
+        result = generator(prompt, max_length=200, do_sample=False)[0]['generated_text']
+        return result.strip()
     except Exception as e:
-        print("❌ Worker error:", e)
+        print("Summary error:", e)
+        return "Summary unavailable"
 
-    # ⏱️ wait before next cycle
-    time.sleep(10)
+
+# 🧠 Generate headline for topic
+def generate_headline(text):
+    prompt = f"""
+    Generate a short news headline (max 8 words).
+
+    Rules:
+    - Capture the main event
+    - Use real entity names
+    - No vague words
+
+    Text:
+    {text}
+    """
+
+    try:
+        result = generator(prompt, max_length=20, do_sample=False)[0]['generated_text']
+        return result.strip()
+    except Exception as e:
+        print("Headline error:", e)
+        return "Breaking News"
+
+
+# 🔄 Process topics
+def process_topics():
+    print("Checking for unprocessed topics...")
+
+    # get unique topics
+    topics = collection.distinct("topic")
+
+    for topic in topics:
+        if not topic:
+            continue
+
+        docs = list(collection.find({
+            "topic": topic,
+            "processed": False
+        }))
+
+        if not docs:
+            continue
+
+        print(f"\nProcessing topic: {topic}")
+
+        # 🧠 Combine all messages
+        combined_text = "\n".join([doc["text"] for doc in docs if doc.get("text")])
+
+        if len(combined_text) < 20:
+            continue
+
+        # 🤖 AI generation
+        summary = generate_summary(combined_text)
+        headline = generate_headline(combined_text)
+
+        # 💾 Update all docs in this topic
+        collection.update_many(
+            {"topic": topic},
+            {
+                "$set": {
+                    "summary": summary,
+                    "headline": headline,
+                    "processed": True,
+                    "last_updated": datetime.utcnow()
+                }
+            }
+        )
+
+        print("✅ Done:", headline)
+
+
+# 🚀 LOOP
+def main():
+    while True:
+        try:
+            process_topics()
+            print("\nSleeping 30 sec...\n")
+            time.sleep(30)
+
+        except Exception as e:
+            print("Error:", e)
+            time.sleep(10)
+
+
+if __name__ == "__main__":
+    main()
