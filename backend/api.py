@@ -1,143 +1,59 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from pymongo import MongoClient
 import os
-from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime
-from fetcher import fetch_news
-
-import threading
-import time
 
 app = FastAPI()
-
-# 🌐 CORS (restrict in production)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # ⚠️ change in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # 🔌 MongoDB connection
 MONGO_URI = os.getenv("MONGO_URI")
 
 if not MONGO_URI:
-    raise Exception("MONGO_URI not found in environment variables")
+    raise Exception("MONGO_URI not found")
 
 client = MongoClient(MONGO_URI)
 db = client["news_db"]
 collection = db["messages"]
 
-# ⚡ CREATE INDEXES (IMPORTANT for performance)
-collection.create_index([("topic", 1)])
-collection.create_index([("created_at", -1)])
-collection.create_index([("processed", 1)])
 
-# 🏠 Health check
-@app.api_route("/", methods=["GET", "HEAD"])
-def home(request: Request):
-    return {"status": "API is running 🚀"}
+# 🏠 Health check (VERY IMPORTANT for Render)
+@app.get("/")
+def home():
+    return {"status": "API running 🚀"}
 
 
-# 🔥 AUTO FETCH FUNCTION (SAFE VERSION)
-def background_fetch():
-    while True:
-        try:
-            print("🚀 Auto fetching news...")
-            fetch_news()
-            print("✅ Fetch done. Sleeping 60 sec...\n")
-        except Exception as e:
-            print("❌ Fetch error:", e)
-
-        time.sleep(60)
-
-
-# 🚀 START BACKGROUND TASK
-@app.on_event("startup")
-def start_background_task():
-    thread = threading.Thread(target=background_fetch, daemon=True)
-    thread.start()
-
-
-# 🔥 MANUAL FETCH
-@app.get("/fetch-news")
-def run_fetch():
-    try:
-        fetch_news()
-        return {"status": "News fetched successfully ✅"}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-# 🔥 GET ALL TOPICS (OPTIMIZED)
+# 📊 Get topics
 @app.get("/topics")
 def get_topics():
-    pipeline = [
-        {"$sort": {"created_at": -1}},
-        {
-            "$group": {
-                "_id": "$topic",
-                "topic_name": {"$first": "$topic_name"},
-                "headline": {"$first": "$headline"},
-                "summary": {"$first": "$summary"},
-                "last_updated": {"$first": "$created_at"},
-                "updates": {"$sum": 1}
-            }
-        },
-        {"$sort": {"last_updated": -1}},
-        {"$limit": 50}  # ⚠️ prevent huge responses
-    ]
+    topics = collection.distinct("topic")
 
-    result = list(collection.aggregate(pipeline))
+    result = []
 
-    return [
-        {
-            "topic": r["_id"],
-            "topic_name": r.get("topic_name"),
-            "headline": r.get("headline"),
-            "summary": r.get("summary"),
-            "updates": r.get("updates"),
-            "last_updated": r.get("last_updated")
-        }
-        for r in result
-    ]
+    for topic in topics:
+        docs = list(
+            collection.find({"topic": topic})
+            .sort("created_at", -1)
+            .limit(5)
+        )
 
+        if not docs:
+            continue
 
-# 🔥 GET FULL TIMELINE (PAGINATED)
-@app.get("/topic/{topic_id}")
-def get_topic_details(topic_id: str, limit: int = 50):
-    docs = list(
-        collection.find({"topic": topic_id})
-        .sort("created_at", -1)
-        .limit(limit)
-    )
+        latest = docs[0]
 
-    if not docs:
-        return {"error": "Topic not found"}
+        # 🧠 Simple headline & summary (no heavy AI)
+        headline = latest.get("text", "")[:80]
+        summary = " ".join([d.get("text", "") for d in docs])[:250]
 
-    return {
-        "topic": topic_id,
-        "topic_name": docs[0].get("topic_name", "Unknown"),
-        "messages": [
-            {
-                "text": d.get("text"),
-                "summary": d.get("summary"),
-                "headline": d.get("headline"),
-                "created_at": d.get("created_at")
-            }
-            for d in docs
-        ]
-    }
+        result.append({
+            "topic": topic,
+            "topic_name": topic,
+            "headline": headline,
+            "summary": summary,
+            "updates": len(docs),
+            "last_updated": latest.get("created_at")
+        })
 
+    # 🔥 Sort by latest update (newest first)
+    result.sort(key=lambda x: x["last_updated"], reverse=True)
 
-# 🔥 OPTIONAL: DELETE OLD DATA (to control DB size)
-@app.delete("/cleanup")
-def cleanup(days: int = 7):
-    cutoff = datetime.utcnow() - timedelta(days=days)
-
-    result = collection.delete_many({
-        "created_at": {"$lt": cutoff}
-    })
-
-    return {"deleted": result.deleted_count}
+    return result
