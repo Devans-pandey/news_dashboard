@@ -9,62 +9,76 @@ client = MongoClient(MONGO_URI)
 db = client["news_db"]
 collection = db["messages"]
 
-# 🤖 Load model
-print("Loading summarizer model...")
-generator = pipeline(
+# 🤖 LOAD MODELS
+print("Loading models...")
+
+# 🧾 Summary model (BEST for news)
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+
+# 📰 Headline model (light + fast)
+headline_generator = pipeline(
     "text2text-generation",
-    model="google/flan-t5-base"
+    model="google/flan-t5-small"
 )
 
-# 🧠 Generate summary for topic
+print("Models loaded ✅")
+
+
+# 🧾 Generate summary (FOR FULL TOPIC)
 def generate_summary(text):
-    prompt = f"""
-    Summarize the following news updates into a clear concise paragraph:
-
-    {text}
-    """
-
     try:
-        result = generator(prompt, max_length=200, do_sample=False)[0]['generated_text']
-        return result.strip()
+        # BART has token limit → chunking
+        chunks = [text[i:i+1000] for i in range(0, len(text), 1000)]
+
+        summaries = []
+
+        for chunk in chunks:
+            result = summarizer(
+                chunk,
+                max_length=120,
+                min_length=40,
+                do_sample=False
+            )[0]["summary_text"]
+
+            summaries.append(result)
+
+        return " ".join(summaries)
+
     except Exception as e:
         print("Summary error:", e)
         return "Summary unavailable"
 
 
-# 🧠 Generate headline for topic
-def generate_headline(text):
+# 📰 Generate headline (FROM SUMMARY)
+def generate_headline(summary):
     prompt = f"""
-    Generate a short news headline (max 8 words).
+    Generate a short breaking news headline (max 8 words).
 
-    Rules:
-    - Capture the main event
-    - Use real entity names
-    - No vague words
-
-    Text:
-    {text}
+    News:
+    {summary}
     """
 
     try:
-        result = generator(prompt, max_length=20, do_sample=False)[0]['generated_text']
+        result = headline_generator(
+            prompt,
+            max_length=20,
+            do_sample=False
+        )[0]["generated_text"]
+
         return result.strip()
+
     except Exception as e:
         print("Headline error:", e)
         return "Breaking News"
 
 
-# 🔄 Process topics
+# 🔄 PROCESS TOPICS
 def process_topics():
-    print("Checking for unprocessed topics...")
+    print("Checking topics...")
 
-    # get unique topics
     topics = collection.distinct("topic")
 
     for topic in topics:
-        if not topic:
-            continue
-
         docs = list(collection.find({
             "topic": topic,
             "processed": False
@@ -75,17 +89,19 @@ def process_topics():
 
         print(f"\nProcessing topic: {topic}")
 
-        # 🧠 Combine all messages
-        combined_text = "\n".join([doc["text"] for doc in docs if doc.get("text")])
+        # 🔥 Combine ALL messages
+        combined_text = "\n".join([d["text"] for d in docs if d.get("text")])
 
-        if len(combined_text) < 20:
+        if len(combined_text) < 50:
             continue
 
-        # 🤖 AI generation
+        # 🧠 Generate summary
         summary = generate_summary(combined_text)
-        headline = generate_headline(combined_text)
 
-        # 💾 Update all docs in this topic
+        # 🧠 Generate headline from summary
+        headline = generate_headline(summary)
+
+        # 💾 Update DB
         collection.update_many(
             {"topic": topic},
             {
