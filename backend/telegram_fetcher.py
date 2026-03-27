@@ -1,27 +1,28 @@
+from fastapi import FastAPI
 from telethon import TelegramClient, events
 from pymongo import MongoClient
 from datetime import datetime
-import time
+import asyncio
 import os
 
-# 🔌 MongoDB connection (use env variable in Render)
+app = FastAPI()
+
+# 🔌 MongoDB
 MONGO_URI = os.getenv("MONGO_URI")
 
 if not MONGO_URI:
-    raise Exception("❌ MONGO_URI not found in environment variables")
+    raise Exception("MONGO_URI not found")
 
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client["news_db"]
 collection = db["messages"]
 
-# 📡 Telegram API credentials (YOURS)
+# 📡 Telegram API
 api_id = 32424333
 api_hash = "3fae8215547deff7b0930dbff9870226"
 
-# 📡 Telegram client
-client = TelegramClient('session', api_id, api_hash, auto_reconnect=True)
+client = TelegramClient('session', api_id, api_hash)
 
-# 📢 Channels to monitor
 channels = [
     "osinttv",
     "defencesphere",
@@ -29,9 +30,7 @@ channels = [
     "dashNewsmy"
 ]
 
-print("🚀 Starting Telegram Fetcher...")
-
-# 🔄 Message handler (NO AI — only raw storage)
+# 📡 Message handler
 @client.on(events.NewMessage(chats=channels))
 async def handler(event):
     message = event.message.text
@@ -44,19 +43,13 @@ async def handler(event):
         "date": event.message.date,
         "channel": str(event.chat_id),
         "created_at": datetime.utcnow(),
-
-        # 🔥 IMPORTANT FLAGS
-        "processed": False,   # worker will process later
-        "topic": None,
-        "topic_name": None,
-        "headline": None,
-        "summary": None
+        "processed": False
     }
 
     try:
         collection.insert_one(data)
 
-        print("\n✅ NEW MESSAGE SAVED:")
+        print("\n✅ SAVED MESSAGE:")
         print(message[:100])
         print("-" * 50)
 
@@ -64,20 +57,21 @@ async def handler(event):
         print("❌ DB Error:", e)
 
 
-# 🚀 MAIN LOOP (auto reconnect)
-def main():
-    while True:
-        try:
-            print("📡 Listening to Telegram channels...\n")
-            client.start()
-            client.run_until_disconnected()
-
-        except Exception as e:
-            print("❌ Error:", e)
-            print("🔄 Reconnecting in 5 seconds...\n")
-            time.sleep(5)
+# 🔁 Background task
+async def start_telegram():
+    print("🚀 Starting Telegram client...")
+    await client.start()
+    print("📡 Listening to channels...")
+    await client.run_until_disconnected()
 
 
-# ▶️ Run
-if __name__ == "__main__":
-    main()
+# 🚀 Run background on startup
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(start_telegram())
+
+
+# 🏠 Health route (REQUIRED for Render)
+@app.get("/")
+def home():
+    return {"status": "Fetcher running 🚀"}
