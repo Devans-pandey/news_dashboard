@@ -1,55 +1,42 @@
-from fastapi import FastAPI
-from pymongo import MongoClient
+import requests
 import os
 
-from telegram_fetcher import run_fetch
-from gemini_summariser import generate_summary_and_title
-
-app = FastAPI()
-
-# MongoDB
-MONGO_URI = os.getenv("MONGO_URI")
-client = MongoClient(MONGO_URI)
-db = client["news_db"]
-collection = db["messages"]
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 
-# 🔹 Root
-@app.get("/")
-def home():
-    return {"status": "API running"}
+def generate_summary_and_title(messages):
+    combined_text = " ".join(messages)
 
+    prompt = f"""
+You are a professional news assistant.
 
-# 🔹 Fetch endpoint (called by cron)
-@app.get("/fetch")
-def fetch():
-    run_fetch()
-    return {"status": "fetched successfully"}
+1. Generate a short factual headline (max 10 words)
+2. Generate a clear summary (3-4 lines)
+3. Do NOT add false or misleading information
 
+News:
+{combined_text}
+"""
 
-# 🔹 Topics endpoint
-@app.get("/topics")
-def get_topics():
-    topics = []
-    grouped = {}
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
 
-    # Group messages
-    for msg in collection.find().sort("date", -1).limit(100):
-        topic = msg.get("topic", "general")
+    try:
+        response = requests.post(
+            url,
+            headers={"Content-Type": "application/json"},
+            json={
+                "contents": [{"parts": [{"text": prompt}]}]
+            }
+        )
 
-        if topic not in grouped:
-            grouped[topic] = []
+        text = response.json()['candidates'][0]['content']['parts'][0]['text']
 
-        grouped[topic].append(msg["text"])
+        lines = text.split("\n")
+        title = lines[0]
+        summary = "\n".join(lines[1:])
 
-    # Generate summary per topic
-    for topic, messages in grouped.items():
-        title, summary = generate_summary_and_title(messages)
+        return title.strip(), summary.strip()
 
-        topics.append({
-            "topic": topic,
-            "headline": title,
-            "summary": summary
-        })
-
-    return topics
+    except Exception as e:
+        print("Gemini error:", e)
+        return "No headline", "No summary"
