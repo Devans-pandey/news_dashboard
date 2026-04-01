@@ -2,58 +2,54 @@ from fastapi import FastAPI
 from pymongo import MongoClient
 import os
 
+from telegram_fetcher import run_fetch
+from gemini_summariser import generate_summary_and_title
+
 app = FastAPI()
 
-# 🔌 MongoDB connection
+# MongoDB
 MONGO_URI = os.getenv("MONGO_URI")
-
-if not MONGO_URI:
-    raise Exception("MONGO_URI not found")
-
 client = MongoClient(MONGO_URI)
 db = client["news_db"]
 collection = db["messages"]
 
 
-# 🏠 Health check (VERY IMPORTANT for Render)
+# 🔹 Root
 @app.get("/")
 def home():
-    return {"status": "API running 🚀"}
+    return {"status": "API running"}
 
 
-# 📊 Get topics
+# 🔹 Fetch endpoint (called by cron)
+@app.get("/fetch")
+def fetch():
+    run_fetch()
+    return {"status": "fetched successfully"}
+
+
+# 🔹 Topics endpoint
 @app.get("/topics")
 def get_topics():
-    topics = collection.distinct("topic")
+    topics = []
+    grouped = {}
 
-    result = []
+    # Group messages
+    for msg in collection.find().sort("date", -1).limit(100):
+        topic = msg.get("topic", "general")
 
-    for topic in topics:
-        docs = list(
-            collection.find({"topic": topic})
-            .sort("created_at", -1)
-            .limit(5)
-        )
+        if topic not in grouped:
+            grouped[topic] = []
 
-        if not docs:
-            continue
+        grouped[topic].append(msg["text"])
 
-        latest = docs[0]
+    # Generate summary per topic
+    for topic, messages in grouped.items():
+        title, summary = generate_summary_and_title(messages)
 
-        # 🧠 Simple headline & summary (no heavy AI)
-        headline = latest.get("text", "")[:80]
-        summary = " ".join([d.get("text", "") for d in docs])[:250]
-
-        result.append({
+        topics.append({
             "topic": topic,
-            "topic_name": topic,
-            "headline": headline,
-            "summary": summary,
-            "updates": len(docs),
-            "last_updated": latest.get("created_at")
+            "headline": title,
+            "summary": summary
         })
 
-    # 🔥 Sort by latest update (newest first)
-    result.sort(key=lambda x: x["last_updated"], reverse=True)
-
-    return result
+    return topics
