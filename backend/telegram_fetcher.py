@@ -15,7 +15,13 @@ db = mongo_client["news_db"]
 collection = db["messages"]
 
 # Channels
-channels = ["your_dummy_channel"]  # change later
+channels = [
+    "osinttv",
+    "defencesphere",
+    "MappingConflicts",
+    "dashNewsmy"
+]
+
 
 
 def get_client():
