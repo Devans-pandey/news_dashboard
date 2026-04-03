@@ -2,6 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 import os
+import threading
+import time
+import requests as http_requests
 from collections import defaultdict
 from datetime import datetime
 from telegram_fetcher import run_fetch
@@ -24,6 +27,52 @@ MONGO_URI = os.getenv("MONGO_URI")
 client = MongoClient(MONGO_URI)
 db = client["news_db"]
 collection = db["messages"]
+
+
+# ============================================
+# 🔄 BACKGROUND KEEP-ALIVE + AUTO-FETCH
+# ============================================
+RENDER_URL = os.getenv("RENDER_URL", "")  # e.g. https://news-dashboard-xsto.onrender.com
+FETCH_INTERVAL = 300   # fetch new messages every 5 minutes
+PING_INTERVAL = 600    # ping self every 10 minutes to prevent sleep
+
+
+def background_worker():
+    """Background thread: keeps Render awake + auto-fetches Telegram messages."""
+    time.sleep(30)  # wait for server to fully start
+    print("🔄 Background worker started")
+
+    last_fetch = 0
+    last_ping = 0
+
+    while True:
+        now = time.time()
+
+        # Auto-fetch from Telegram
+        if now - last_fetch >= FETCH_INTERVAL:
+            try:
+                print("🚀 Auto-fetching messages...")
+                run_fetch()
+                last_fetch = now
+                print("✅ Auto-fetch complete")
+            except Exception as e:
+                print(f"❌ Auto-fetch error: {e}")
+
+        # Self-ping to prevent Render sleep
+        if RENDER_URL and now - last_ping >= PING_INTERVAL:
+            try:
+                http_requests.get(f"{RENDER_URL}/", timeout=10)
+                last_ping = now
+                print("🏓 Self-ping OK")
+            except Exception as e:
+                print(f"⚠️ Self-ping failed: {e}")
+
+        time.sleep(60)  # check every minute
+
+
+# Start background worker on server boot
+worker_thread = threading.Thread(target=background_worker, daemon=True)
+worker_thread.start()
 
 
 @app.get("/")
