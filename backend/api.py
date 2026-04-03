@@ -1,57 +1,50 @@
 from fastapi import FastAPI
 from pymongo import MongoClient
 import os
-
-from gemini_summariser import generate_summary_and_title
+from collections import defaultdict
+from telegram_fetcher import run_fetch
 
 app = FastAPI()
 
-# DEBUG (remove later)
-print("FILES:", os.listdir())
-print("API STARTING...")
+MONGO_URI = os.getenv("MONGO_URI")
 
-# MongoDB
-MONGO_URI = os.getenv("MONGO_URI", "")
 client = MongoClient(MONGO_URI)
 db = client["news_db"]
 collection = db["messages"]
 
 
-# 🔹 Root
 @app.get("/")
 def home():
-    return {"status": "API running"}
+    return {"message": "News API running"}
 
 
-# 🔹 Fetch (IMPORTANT: lazy import)
+# 🚀 FETCH ENDPOINT
 @app.get("/fetch")
 def fetch():
-    from telegram_fetcher import run_fetch
     run_fetch()
-    return {"status": "fetched successfully"}
+    return {"status": "fetched"}
 
 
-# 🔹 Topics
+# 🚀 TOPICS ENDPOINT
 @app.get("/topics")
 def get_topics():
-    topics = []
-    grouped = {}
+    data = list(collection.find())
 
-    for msg in collection.find().sort("date", -1).limit(100):
-        topic = msg.get("topic", "general")
+    grouped = defaultdict(list)
 
-        if topic not in grouped:
-            grouped[topic] = []
+    for item in data:
+        topic = item.get("topic", "General News")
+        grouped[topic].append(item["text"])
 
-        grouped[topic].append(msg["text"])
+    response = []
 
-    for topic, messages in grouped.items():
-        title, summary = generate_summary_and_title(messages)
+    for topic, texts in grouped.items():
+        combined_text = " ".join(texts[:5])  # take few messages
 
-        topics.append({
+        response.append({
             "topic": topic,
-            "headline": title,
-            "summary": summary
+            "headline": combined_text[:100],
+            "summary": combined_text[:300]
         })
 
-    return topics
+    return response

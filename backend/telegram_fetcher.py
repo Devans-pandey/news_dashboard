@@ -1,59 +1,54 @@
+import os
+import asyncio
 from telethon import TelegramClient
 from pymongo import MongoClient
 from datetime import datetime
-import os
-import asyncio
+from topic_classifier import classify_topic
 
-# ENV variables (SAFE)
-API_ID = int(os.getenv("TELEGRAM_API_ID", "0"))
-API_HASH = os.getenv("TELEGRAM_API_HASH", "")
-MONGO_URI = os.getenv("MONGO_URI", "")
+# ENV VARIABLES
+API_ID = int(os.getenv("API_ID"))
+API_HASH = os.getenv("API_HASH")
+MONGO_URI = os.getenv("MONGO_URI")
 
 # MongoDB
-mongo_client = MongoClient(MONGO_URI)
-db = mongo_client["news_db"]
+client = MongoClient(MONGO_URI)
+db = client["news_db"]
 collection = db["messages"]
 
-# Channels
+# Telegram client (session file must exist)
+tg_client = TelegramClient("session", API_ID, API_HASH)
+
+# Channels (IMPORTANT: only usernames, no https)
 channels = [
     "osinttv",
-    "defencesphere",
-    "MappingConflicts",
-    "dashNewsmy"
+    "MappingConflicts"
 ]
 
-
-
-def get_client():
-    return TelegramClient('session', API_ID, API_HASH)
-
-
 async def fetch_messages():
-    print("Fetching messages...")
-
-    client = get_client()
-    await client.start()
+    await tg_client.start()
 
     for channel in channels:
-        async for message in client.iter_messages(channel, limit=30):
-            if message.text:
+        print(f"Fetching from {channel}")
 
-                data = {
-                    "text": message.text,
-                    "date": message.date,
-                    "channel": channel,
-                    "created_at": datetime.utcnow(),
-                    "topic": "general"
-                }
+        async for message in tg_client.iter_messages(channel, limit=20):
+            if not message.text:
+                continue
 
-                # Avoid duplicates
-                collection.update_one(
-                    {"text": message.text},
-                    {"$set": data},
-                    upsert=True
-                )
+            text = message.text.strip()
 
-    print("Fetch completed.")
+            # 🔥 AI Topic Classification
+            topic = classify_topic(text)
+
+            doc = {
+                "text": text,
+                "channel": channel,
+                "created_at": datetime.utcnow(),
+                "topic": topic
+            }
+
+            collection.insert_one(doc)
+
+    print("Fetching complete")
 
 
 def run_fetch():
