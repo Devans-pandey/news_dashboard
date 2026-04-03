@@ -4,7 +4,7 @@ import time
 
 HF_API_KEY = os.getenv("HF_API_KEY", "")
 
-API_URL = "https://api-inference.huggingface.co/models/facebook/bart-large-mnli"
+API_URL = "https://router.huggingface.co/hf-inference/models/facebook/bart-large-mnli"
 
 headers = {
     "Authorization": f"Bearer {HF_API_KEY}"

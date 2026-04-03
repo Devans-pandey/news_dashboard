@@ -55,6 +55,11 @@ async def fetch_messages():
                 if not text:
                     continue
 
+                # 🔥 Check if message already exists BEFORE classifying to save API calls
+                existing = collection.find_one({"channel": channel, "message_id": message.id})
+                if existing:
+                    continue  # Skip immediately!
+
                 # 🔥 AI Topic Classification
                 try:
                     topic = classify_topic(text)
@@ -70,15 +75,10 @@ async def fetch_messages():
                     "topic": topic,
                 }
 
-                # 🔥 Upsert to prevent duplicates
-                result = collection.update_one(
-                    {"channel": channel, "message_id": message.id},
-                    {"$setOnInsert": doc},
-                    upsert=True,
-                )
-
-                if result.upserted_id:
-                    new_count += 1
+                # Insert the completely new message
+                collection.insert_one(doc)
+                new_count += 1
+                print(f"✅ Stored NEW message from {channel}: {text[:30]}...")
 
         except Exception as e:
             error_msg = f"❌ Error fetching from {channel}: {e}"
