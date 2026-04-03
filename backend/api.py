@@ -30,12 +30,35 @@ def home():
     return {"message": "News API running"}
 
 
+# 🚀 DEBUG ENDPOINT — check what env vars are set (safe: only shows key names)
+@app.get("/debug")
+def debug():
+    return {
+        "MONGO_URI": "SET" if os.getenv("MONGO_URI") else "MISSING",
+        "TELEGRAM_API_ID": "SET" if os.getenv("TELEGRAM_API_ID") else "MISSING",
+        "TELEGRAM_API_HASH": "SET" if os.getenv("TELEGRAM_API_HASH") else "MISSING",
+        "TELEGRAM_SESSION": "SET" if os.getenv("TELEGRAM_SESSION") else "MISSING",
+        "HF_API_KEY": "SET" if os.getenv("HF_API_KEY") else "MISSING",
+        "GEMINI_API_KEY": "SET" if os.getenv("GEMINI_API_KEY") else "MISSING",
+        "mongo_db": db.name,
+        "mongo_collection": collection.name,
+        "document_count": collection.count_documents({}),
+    }
+
+
 # 🚀 FETCH ENDPOINT — trigger Telegram fetch
 @app.get("/fetch")
 def fetch():
-    run_fetch()
-    count = collection.count_documents({})
-    return {"status": "fetched", "total_messages": count}
+    try:
+        result = run_fetch()
+        count = collection.count_documents({})
+        return {
+            "status": "fetched",
+            "total_messages": count,
+            "details": result,
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 
 # 🚀 STATS ENDPOINT — dashboard statistics
@@ -45,7 +68,6 @@ def get_stats():
     topics = collection.distinct("topic")
     total_topics = len(topics)
 
-    # get last message timestamp
     last_doc = collection.find_one(sort=[("created_at", -1)])
     last_updated = last_doc.get("created_at") if last_doc else None
 
@@ -61,6 +83,9 @@ def get_stats():
 def get_topics():
     data = list(collection.find())
 
+    if not data:
+        return []
+
     # group messages by topic
     grouped = defaultdict(list)
     for item in data:
@@ -70,7 +95,6 @@ def get_topics():
     response = []
 
     for topic, docs in grouped.items():
-        # sort by created_at descending
         docs.sort(key=lambda x: x.get("created_at", datetime.min), reverse=True)
 
         latest = docs[0]
@@ -94,7 +118,6 @@ def get_topics():
             "channel": latest.get("channel", "unknown"),
         })
 
-    # sort by message count + recency
     response.sort(
         key=lambda x: (x["message_count"], x.get("last_updated") or datetime.min),
         reverse=True,
@@ -122,7 +145,6 @@ def get_topic_messages(topic_name: str):
             "topic": doc.get("topic", "General News"),
         })
 
-    # generate headline + summary for the topic
     texts = [d.get("text", "") for d in docs[:5]]
     try:
         headline, summary = generate_summary_and_title(texts)
