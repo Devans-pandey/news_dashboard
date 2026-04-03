@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import datetime
 from telegram_fetcher import run_fetch
 from gemini_summariser import generate_summary_and_title
+from topic_classifier import classify_topic
 
 app = FastAPI(title="News Dashboard API")
 
@@ -60,6 +61,36 @@ def fetch():
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
+
+# 🚀 RECLASSIFY ENDPOINT — re-classify all existing messages
+@app.get("/reclassify")
+def reclassify():
+    try:
+        docs = list(collection.find())
+        updated = 0
+
+        for doc in docs:
+            text = doc.get("text", "")
+            if not text.strip():
+                continue
+
+            new_topic = classify_topic(text)
+            old_topic = doc.get("topic", "General News")
+
+            if new_topic != old_topic:
+                collection.update_one(
+                    {"_id": doc["_id"]},
+                    {"$set": {"topic": new_topic}}
+                )
+                updated += 1
+
+        return {
+            "status": "reclassified",
+            "total": len(docs),
+            "updated": updated,
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 # 🚀 STATS ENDPOINT — dashboard statistics
 @app.get("/stats")
