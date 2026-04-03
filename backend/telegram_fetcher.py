@@ -6,8 +6,8 @@ from datetime import datetime
 from topic_classifier import classify_topic
 
 # ENV VARIABLES
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
+API_ID = int(os.getenv("TELEGRAM_API_ID"))
+API_HASH = os.getenv("TELEGRAM_API_HASH")
 MONGO_URI = os.getenv("MONGO_URI")
 
 # MongoDB
