@@ -33,17 +33,19 @@ collection = db["messages"]
 # 🔄 BACKGROUND KEEP-ALIVE + AUTO-FETCH
 # ============================================
 RENDER_URL = os.getenv("RENDER_URL", "")  # e.g. https://news-dashboard-xsto.onrender.com
-FETCH_INTERVAL = 300   # fetch new messages every 5 minutes
-PING_INTERVAL = 600    # ping self every 10 minutes to prevent sleep
+FETCH_INTERVAL = 300    # fetch new messages every 5 minutes
+PING_INTERVAL = 600     # ping self every 10 minutes to prevent sleep
+SUMMARY_INTERVAL = 1800 # regenerate summaries every 30 minutes
 
 
 def background_worker():
-    """Background thread: keeps Render awake + auto-fetches Telegram messages."""
+    """Background thread: keeps Render awake + auto-fetches + generates summaries."""
     time.sleep(30)  # wait for server to fully start
     print("🔄 Background worker started")
 
     last_fetch = 0
     last_ping = 0
+    last_summary = 0
 
     while True:
         now = time.time()
@@ -57,6 +59,17 @@ def background_worker():
                 print("✅ Auto-fetch complete")
             except Exception as e:
                 print(f"❌ Auto-fetch error: {e}")
+
+        # Auto-generate summaries (calls Gemini sparingly)
+        if now - last_summary >= SUMMARY_INTERVAL:
+            try:
+                print("📝 Auto-generating summaries...")
+                if RENDER_URL:
+                    http_requests.get(f"{RENDER_URL}/generate-summaries", timeout=60)
+                last_summary = now
+                print("✅ Summaries generated")
+            except Exception as e:
+                print(f"⚠️ Summary generation error: {e}")
 
         # Self-ping to prevent Render sleep
         if RENDER_URL and now - last_ping >= PING_INTERVAL:
@@ -158,7 +171,73 @@ def get_stats():
     }
 
 
-# 🚀 TOPICS ENDPOINT — list all topics with headline + summary
+# 🔥 Summaries cache collection
+summaries_collection = db["summaries"]
+
+
+def _get_cached_summary(topic):
+    """Get cached headline + summary from MongoDB."""
+    cached = summaries_collection.find_one({"topic": topic})
+    if cached:
+        return cached.get("headline", ""), cached.get("summary", "")
+    return None, None
+
+
+def _fallback_summary(texts):
+    """Quick text-based summary without any API call."""
+    combined = " ".join(t.strip() for t in texts if t.strip())
+    if not combined:
+        return "Breaking News", "Details coming soon..."
+
+    sentences = combined.replace("\n", ". ").split(".")
+    sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
+
+    headline = sentences[0][:80] if sentences else combined[:80]
+    summary = ". ".join(sentences[:3])[:300] if sentences else combined[:300]
+    return headline, summary
+
+
+# 🚀 GENERATE SUMMARIES — call Gemini ONCE per topic, cache in MongoDB
+@app.get("/generate-summaries")
+def generate_summaries():
+    """Generate and cache summaries for all topics. Call this once, not on every page load."""
+    try:
+        topics = collection.distinct("topic")
+        generated = 0
+
+        for topic in topics:
+            docs = list(
+                collection.find({"topic": topic}).sort("created_at", -1).limit(5)
+            )
+            if not docs:
+                continue
+
+            texts = [d.get("text", "") for d in docs]
+
+            try:
+                headline, summary = generate_summary_and_title(texts)
+                if headline and headline != "No headline":
+                    summaries_collection.update_one(
+                        {"topic": topic},
+                        {"$set": {
+                            "topic": topic,
+                            "headline": headline,
+                            "summary": summary,
+                            "generated_at": datetime.utcnow(),
+                        }},
+                        upsert=True,
+                    )
+                    generated += 1
+                    print(f"✅ Summary cached: {topic} → {headline}")
+            except Exception as e:
+                print(f"⚠️ Summary failed for {topic}: {e}")
+
+        return {"status": "done", "generated": generated, "total_topics": len(topics)}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+# 🚀 TOPICS ENDPOINT — list all topics (uses cached summaries, NO Gemini calls)
 @app.get("/topics")
 def get_topics():
     data = list(collection.find())
@@ -181,13 +260,10 @@ def get_topics():
         count = len(docs)
         texts = [d.get("text", "") for d in docs[:5]]
 
-        # try Gemini for headline + summary
-        try:
-            headline, summary = generate_summary_and_title(texts)
-        except Exception:
-            combined = " ".join(texts)
-            headline = combined[:100]
-            summary = combined[:300]
+        # Use CACHED summary (no API call)
+        headline, summary = _get_cached_summary(topic)
+        if not headline:
+            headline, summary = _fallback_summary(texts)
 
         response.append({
             "topic": topic,
@@ -226,12 +302,11 @@ def get_topic_messages(topic_name: str):
         })
 
     texts = [d.get("text", "") for d in docs[:5]]
-    try:
-        headline, summary = generate_summary_and_title(texts)
-    except Exception:
-        combined = " ".join(texts)
-        headline = combined[:100]
-        summary = combined[:300]
+
+    # Use CACHED summary (no API call)
+    headline, summary = _get_cached_summary(topic_name)
+    if not headline:
+        headline, summary = _fallback_summary(texts)
 
     return {
         "topic": topic_name,
