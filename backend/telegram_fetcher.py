@@ -26,8 +26,11 @@ channels = [
     "dashNewsmy"
 ]
 
+
 async def fetch_messages():
     await tg_client.start()
+
+    new_count = 0
 
     for channel in channels:
         print(f"Fetching from {channel}")
@@ -38,20 +41,33 @@ async def fetch_messages():
 
             text = message.text.strip()
 
+            if not text:
+                continue
+
             # 🔥 AI Topic Classification
             topic = classify_topic(text)
 
             doc = {
                 "text": text,
                 "channel": channel,
+                "message_id": message.id,
                 "created_at": datetime.utcnow(),
-                "topic": topic
+                "topic": topic,
             }
 
-            collection.insert_one(doc)
+            # 🔥 Upsert to prevent duplicates — keyed on (channel, message_id)
+            result = collection.update_one(
+                {"channel": channel, "message_id": message.id},
+                {"$setOnInsert": doc},
+                upsert=True,
+            )
 
-    print("Fetching complete")
+            if result.upserted_id:
+                new_count += 1
+
+    print(f"Fetching complete — {new_count} new messages inserted")
+    return new_count
 
 
 def run_fetch():
-    asyncio.run(fetch_messages())
+    return asyncio.run(fetch_messages())

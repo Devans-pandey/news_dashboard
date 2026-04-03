@@ -3,3 +3,4 @@ uvicorn
 pymongo
 telethon
 requests
+python-dotenv
