@@ -1176,8 +1176,7 @@
   }
 }
 
-
-
+.world-map-section {
   background: var(--bg-card);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-lg);
