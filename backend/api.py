@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 import os
@@ -124,14 +124,13 @@ def fetch():
         return {"status": "error", "error": str(e)}
 
 
-# 🚀 RECLASSIFY ENDPOINT — re-classify all existing messages
-@app.get("/reclassify")
-def reclassify():
+def _run_reclassify_background():
     try:
+        print("🔄 Starting background reclassification (with rate limit protection)...")
         docs = list(collection.find())
         updated = 0
 
-        for doc in docs:
+        for idx, doc in enumerate(docs):
             text = doc.get("text", "")
             if not text.strip():
                 continue
@@ -145,11 +144,25 @@ def reclassify():
                     {"$set": {"topic": new_topic}}
                 )
                 updated += 1
+            
+            # Prevent Gemini rate limit (15 requests/min on free tier)
+            time.sleep(4)
+            
+            if idx % 10 == 0:
+                print(f"⏳ Reclassified {idx}/{len(docs)}...")
 
+        print(f"🎯 Reclassification complete! Updated {updated} messages.")
+    except Exception as e:
+        print(f"❌ Reclassify error: {e}")
+
+# 🚀 RECLASSIFY ENDPOINT — re-classify all existing messages
+@app.get("/reclassify")
+def reclassify(background_tasks: BackgroundTasks):
+    try:
+        background_tasks.add_task(_run_reclassify_background)
         return {
-            "status": "reclassified",
-            "total": len(docs),
-            "updated": updated,
+            "status": "reclassification_started",
+            "message": "Processing in the background to respect API rate limits. Check server logs for progress."
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}
