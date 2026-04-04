@@ -134,7 +134,6 @@ function WorldMap({ topics, onCountryClick }) {
   const markersRef = useRef([]);
   const popupRef = useRef(null);
   const [mapLoaded, setMapLoaded] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState(180); // Default mapped to 1.8 * 100
 
   const hotspots = useMemo(() => extractHotspots(topics), [topics]);
 
@@ -145,13 +144,10 @@ function WorldMap({ topics, onCountryClick }) {
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
       style: MAP_STYLE,
-      center: [40, 25],
+      center: [20, 30], // Centered beautifully to show Europe/MiddleEast/Asia
       zoom: 1.8,
-      minZoom: 1.2,
-      maxZoom: 8,
+      interactive: false, // Disables all zooming/panning like worldmonitor.app!
       attributionControl: false,
-      dragRotate: false,
-      pitchWithRotate: false,
     });
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
@@ -159,11 +155,6 @@ function WorldMap({ topics, onCountryClick }) {
 
     map.on("load", () => {
       setMapLoaded(true);
-      setZoomLevel(Math.round(map.getZoom() * 100));
-    });
-
-    map.on("zoom", () => {
-      setZoomLevel(Math.round(map.getZoom() * 100));
     });
 
     mapRef.current = map;
@@ -379,13 +370,6 @@ function WorldMap({ topics, onCountryClick }) {
           Global Situation Monitor
         </h2>
         <div className="map-controls">
-          <button 
-            className="map-reset-btn" 
-            onClick={() => mapRef.current?.flyTo({ center: [40, 25], zoom: 1.8, duration: 1200 })}
-          >
-            ↺ Reset
-          </button>
-          <span className="map-zoom-level">{zoomLevel}%</span>
           <span className="map-live-badge">
             <span className="map-live-dot"></span>
             LIVE
