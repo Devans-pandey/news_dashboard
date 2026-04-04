@@ -1,58 +1,68 @@
 /* ============================================
-   DESIGN SYSTEM — Dark Glassmorphism Theme
+   DESIGN SYSTEM — Professional Dark Dashboard
    ============================================ */
 
 :root {
   /* Background */
-  --bg-primary: #06080f;
-  --bg-secondary: #0c1021;
-  --bg-card: rgba(255, 255, 255, 0.03);
-  --bg-card-hover: rgba(255, 255, 255, 0.06);
-  --bg-glass: rgba(15, 20, 40, 0.6);
-  --bg-detail: #080c18;
+  --bg-primary: #0b1120;
+  --bg-secondary: #0f172a;
+  --bg-sidebar: #0d1526;
+  --bg-card: rgba(15, 23, 42, 0.65);
+  --bg-card-hover: rgba(22, 33, 56, 0.8);
+  --bg-surface: #111b2e;
+  --bg-map: #0a1628;
 
   /* Text */
-  --text-primary: #f1f5f9;
+  --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --text-accent: #e2e8f0;
+  --text-muted: #566a88;
+  --text-accent: #cbd5e1;
 
-  /* Accent gradient */
-  --accent-blue: #3b82f6;
-  --accent-purple: #8b5cf6;
-  --accent-cyan: #06b6d4;
-  --accent-gradient: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  /* Accent */
+  --accent-blue: #38bdf8;
+  --accent-teal: #2dd4bf;
+  --accent-green: #22c55e;
+  --accent-orange: #f59e0b;
+  --accent-red: #ef4444;
+  --accent-purple: #a78bfa;
 
   /* Topic colors */
   --topic-war: #ef4444;
   --topic-defense: #f97316;
   --topic-india: #22c55e;
-  --topic-international: #3b82f6;
+  --topic-international: #38bdf8;
   --topic-tech: #06b6d4;
   --topic-economy: #eab308;
-  --topic-general: #8b5cf6;
+  --topic-general: #a78bfa;
 
   /* Borders */
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-card: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(148, 163, 184, 0.08);
+  --border-card: rgba(148, 163, 184, 0.1);
+  --border-active: rgba(56, 189, 248, 0.3);
 
   /* Shadows */
-  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3);
-  --shadow-glow: 0 0 40px rgba(59, 130, 246, 0.08);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
 
   /* Radius */
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 24px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
 
   /* Typography */
   --font-body: 'Inter', system-ui, -apple-system, sans-serif;
   --font-heading: 'Outfit', 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
   /* Transitions */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Layout */
+  --sidebar-width: 240px;
+  --header-height: 56px;
 }
 
 /* ============================================
@@ -66,7 +76,7 @@
 }
 
 html {
-  font-size: 16px;
+  font-size: 15px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -81,25 +91,7 @@ body {
   line-height: 1.6;
 }
 
-/* Subtle animated gradient background */
-body::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background:
-    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(59, 130, 246, 0.07) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 80% 80%, rgba(139, 92, 246, 0.06) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(6, 182, 212, 0.04) 0%, transparent 60%);
-  pointer-events: none;
-  z-index: 0;
-}
-
 #root {
-  position: relative;
-  z-index: 1;
   min-height: 100vh;
 }
 
@@ -108,7 +100,7 @@ body::before {
    ============================================ */
 
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -116,12 +108,12 @@ body::before {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(148, 163, 184, 0.15);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(148, 163, 184, 0.25);
 }
 
 /* ============================================
@@ -129,18 +121,14 @@ body::before {
    ============================================ */
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(30px);
+    transform: translateY(16px);
   }
   to {
     opacity: 1;
@@ -151,7 +139,7 @@ body::before {
 @keyframes slideDown {
   from {
     opacity: 0;
-    transform: translateY(-20px);
+    transform: translateY(-12px);
   }
   to {
     opacity: 1;
@@ -160,40 +148,26 @@ body::before {
 }
 
 @keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 @keyframes livePulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+    box-shadow: 0 0 0 5px rgba(34, 197, 94, 0);
   }
 }
 
-@keyframes gradientShift {
+@keyframes hotspotPing {
   0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
+    transform: scale(1);
+    opacity: 0.6;
   }
   100% {
-    background-position: 0% 50%;
+    transform: scale(3);
+    opacity: 0;
   }
 }
