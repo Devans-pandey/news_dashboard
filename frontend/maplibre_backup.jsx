@@ -134,6 +134,7 @@ function WorldMap({ topics, onCountryClick }) {
   const markersRef = useRef([]);
   const popupRef = useRef(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(180); // Default mapped to 1.8 * 100
 
   const hotspots = useMemo(() => extractHotspots(topics), [topics]);
 
@@ -158,6 +159,11 @@ function WorldMap({ topics, onCountryClick }) {
 
     map.on("load", () => {
       setMapLoaded(true);
+      setZoomLevel(Math.round(map.getZoom() * 100));
+    });
+
+    map.on("zoom", () => {
+      setZoomLevel(Math.round(map.getZoom() * 100));
     });
 
     mapRef.current = map;
@@ -373,6 +379,13 @@ function WorldMap({ topics, onCountryClick }) {
           Global Situation Monitor
         </h2>
         <div className="map-controls">
+          <button 
+            className="map-reset-btn" 
+            onClick={() => mapRef.current?.flyTo({ center: [40, 25], zoom: 1.8, duration: 1200 })}
+          >
+            ↺ Reset
+          </button>
+          <span className="map-zoom-level">{zoomLevel}%</span>
           <span className="map-live-badge">
             <span className="map-live-dot"></span>
             LIVE
