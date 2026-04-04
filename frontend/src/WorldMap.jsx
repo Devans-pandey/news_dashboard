@@ -147,7 +147,8 @@ function WorldMap({ topics, onCountryClick }) {
       style: MAP_STYLE,
       center: [40, 25],
       zoom: 1.8,
-      interactive: false,
+      minZoom: 1.2,
+      maxZoom: 8,
       attributionControl: false,
     });
 
