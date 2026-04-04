@@ -147,11 +147,8 @@ function WorldMap({ topics, onCountryClick }) {
       style: MAP_STYLE,
       center: [40, 25],
       zoom: 1.8,
-      minZoom: 1.2,
-      maxZoom: 8,
+      interactive: false,
       attributionControl: false,
-      dragRotate: false,
-      pitchWithRotate: false,
     });
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
